@@ -71,14 +71,14 @@
 
   /* ---------- card ---------- */
   .stage{
-    width:100%;max-width:640px;flex:1;display:flex;align-items:center;justify-content:center;
-    perspective:1600px;padding:22px 0;min-height:0;
+    width:100%;max-width:640px;flex:1 1 auto;display:flex;flex-direction:column;justify-content:center;
+    perspective:1600px;padding:18px 0;min-height:0;
   }
   .card{
-    position:relative;width:100%;height:clamp(380px,60vh,470px);
+    position:relative;width:100%;flex:1 1 auto;min-height:250px;max-height:470px;
     cursor:pointer;transform-style:preserve-3d;
     transition:transform .5s cubic-bezier(.2,.7,.2,1);
-    border-radius:22px;
+    border-radius:22px;touch-action:pan-y;
   }
   .card.flipped{transform:rotateY(180deg);}
   .card:focus-visible{outline:none;}
@@ -175,8 +175,12 @@
     .card{transition:none;}
   }
   @media (max-width:520px){
+    body{padding-top:14px;padding-bottom:14px;}
     .tabs{width:100%;justify-content:space-between;margin-top:10px;}
     .tab{flex:1;text-align:center;padding:9px 6px;}
+    .meta{margin-top:12px;}
+    .stage{padding:12px 0;}
+    .footbar{margin-top:8px;}
   }
   @media (max-width:420px){
     .brand h1{max-width:70vw;}
@@ -369,7 +373,24 @@ function go(step){
 /* events */
 document.querySelectorAll(".tab").forEach(t=>
   t.addEventListener("click", ()=>setDeck(t.dataset.deck)));
-els.card.addEventListener("click", flip);
+/* tap = flip, horizontal swipe = prev/next */
+let swiped = false;
+els.card.addEventListener("click", ()=>{ if(swiped){ swiped=false; return; } flip(); });
+(function(){
+  const stage = document.querySelector(".stage");
+  let sx=0, sy=0, st=0;
+  stage.addEventListener("touchstart", e=>{
+    const t=e.changedTouches[0]; sx=t.clientX; sy=t.clientY; st=Date.now(); swiped=false;
+  }, {passive:true});
+  stage.addEventListener("touchend", e=>{
+    const t=e.changedTouches[0];
+    const dx=t.clientX-sx, dy=t.clientY-sy;
+    if(Math.abs(dx)>45 && Math.abs(dx)>Math.abs(dy)*1.4 && (Date.now()-st)<700){
+      swiped = true;              // suppress the flip from the synthetic click
+      go(dx<0 ? 1 : -1);          // swipe left → 下一張, swipe right → 上一張
+    }
+  }, {passive:true});
+})();
 $("speak").addEventListener("click", e=>{ e.stopPropagation(); speakWord(); });
 $("speakEx").addEventListener("click", e=>{ e.stopPropagation(); speakEx(); });
 $("flip").addEventListener("click", flip);
