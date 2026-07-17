@@ -94,6 +94,12 @@
     content:"";position:absolute;top:0;left:0;right:0;height:5px;background:var(--accent);
   }
   .corner{position:absolute;top:14px;right:16px;font-size:12px;color:var(--muted);letter-spacing:.15em;}
+  .play-deck{position:absolute;top:12px;right:14px;z-index:2;display:none;align-items:center;gap:5px;
+    border:1.5px solid var(--accent);background:var(--accent-soft);color:var(--accent);
+    border-radius:16px;padding:5px 11px;font:inherit;font-size:12px;font-weight:600;
+    cursor:pointer;transition:.15s;}
+  .play-deck:hover{background:var(--accent);color:#fff;}
+  .play-deck.playing{background:var(--accent);color:#fff;}
   .front .word{font-size:clamp(44px,13vw,84px);font-weight:600;line-height:1;letter-spacing:.02em;}
   .front .hint{margin-top:22px;font-size:13px;color:var(--muted);letter-spacing:.1em;}
   .speak{
@@ -212,6 +218,7 @@
     <div class="card" id="card" tabindex="0" role="button" aria-label="單字卡，點擊翻面">
       <div class="face front">
         <span class="corner" id="cornerF"></span>
+        <button class="play-deck" id="playDeck" aria-label="播放整組單字" title="播放整組單字">▶ 全部</button>
         <div class="word mincho" id="fWord">飲む</div>
         <button class="speak" id="speak" aria-label="播放發音" title="播放發音（S）">
           <svg viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
@@ -302,8 +309,39 @@ function speak(text, btn){
   }
   window.speechSynthesis.speak(u);
 }
-function speakWord(){ if(curCard) speak(curCard.kana || curCard.jp, $("speak")); }
-function speakEx(){ if(curCard && curCard.ex) speak(curCard.ex, $("speakEx")); }
+function speakWord(){ stopDeckPlay(); if(curCard) speak(curCard.kana || curCard.jp, $("speak")); }
+function speakEx(){ stopDeckPlay(); if(curCard && curCard.ex) speak(curCard.ex, $("speakEx")); }
+
+/* ---- 播放整組單字（該類型全部，依序朗讀）---- */
+let deckRunId = 0;
+function stopDeckPlay(){
+  deckRunId++;
+  if('speechSynthesis' in window) window.speechSynthesis.cancel();
+  const b = $("playDeck"); if(b) b.classList.remove("playing");
+}
+function playDeckAll(){
+  if(!('speechSynthesis' in window)) return;
+  const btn = $("playDeck");
+  const wasPlaying = btn.classList.contains("playing");
+  stopDeckPlay();
+  if(wasPlaying) return;              // 再按一次 = 停止
+  const texts = DECK[deckKey].cards.map(c => c.kana || c.jp).filter(Boolean);
+  if(!texts.length) return;
+  const myRun = deckRunId;
+  btn.classList.add("playing");
+  let i = 0;
+  (function next(){
+    if(myRun !== deckRunId) return;   // 已被其他播放/切換取消
+    if(i >= texts.length){ btn.classList.remove("playing"); return; }
+    const u = new SpeechSynthesisUtterance(texts[i++]);
+    u.lang = "ja-JP"; u.rate = 0.9;
+    if(!jaVoice) pickVoice();
+    if(jaVoice) u.voice = jaVoice;
+    u.onend = next;
+    u.onerror = ()=>{ if(myRun===deckRunId) btn.classList.remove("playing"); };
+    window.speechSynthesis.speak(u);
+  })();
+}
 
 function buildOrder(n, shuffle){
   order = [...Array(n).keys()];
@@ -328,10 +366,16 @@ function setDeck(key, {shuffle=false}={}){
 }
 
 function render(){
+  stopDeckPlay();
   const d = DECK[deckKey];
   const c = d.cards[order[pos]];
   curCard = c;
   els.card.classList.remove("flipped");
+  // 只在每個類型的第一張卡片右上角顯示「播放整組」按鈕
+  const first = pos === 0 && ('speechSynthesis' in window);
+  const pd = $("playDeck");
+  if(pd) pd.style.display = first ? "inline-flex" : "none";
+  els.cornerF.style.visibility = first ? "hidden" : "visible";
   // small delay so the flip-back isn't visible while text swaps
   requestAnimationFrame(()=>{
     els.fWord.textContent = c.jp;
@@ -391,6 +435,7 @@ els.card.addEventListener("click", ()=>{ if(swiped){ swiped=false; return; } fli
     }
   }, {passive:true});
 })();
+$("playDeck").addEventListener("click", e=>{ e.stopPropagation(); playDeckAll(); });
 $("speak").addEventListener("click", e=>{ e.stopPropagation(); speakWord(); });
 $("speakEx").addEventListener("click", e=>{ e.stopPropagation(); speakEx(); });
 $("flip").addEventListener("click", flip);
